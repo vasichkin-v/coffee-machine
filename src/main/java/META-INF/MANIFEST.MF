@@ -1,0 +1,5 @@
+Manifest-Version: 1.0
+Main-Class: com.internship.api.App
+Class-Path: annotations-23.0.0.jar log4j-core-2.7.jar log4j-api-2.7.jar 
+ log4j-slf4j-impl-2.7.jar slf4j-api-1.7.21.jar
+
