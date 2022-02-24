@@ -20,5 +20,6 @@ public class ExceptionCoffeeMachine extends Exception {
 
     public final static ExceptionCoffeeMachine VOLUME_IS_INCORRECT = new ExceptionCoffeeMachine(100, "Possibly wrong volume.");
     public final static ExceptionCoffeeMachine NAME_IS_INCORRECT = new ExceptionCoffeeMachine(101, "Mistake! Possibly incorrect name.");
-    public final static ExceptionCoffeeMachine CMD_IS_INCORRECT = new ExceptionCoffeeMachine(102, "Mistake! Cmd is empty.");
+    public final static ExceptionCoffeeMachine CMD_IS_INCORRECT = new ExceptionCoffeeMachine(102, "Mistake! Command is empty.");
+    public final static ExceptionCoffeeMachine TURN_OFF = new ExceptionCoffeeMachine(103, "Command received to turn off the coffee maker.");
 }

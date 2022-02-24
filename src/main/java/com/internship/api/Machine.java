@@ -1,258 +1,156 @@
 package com.internship.api;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 public class Machine {
-    private Integer coffeeContainer;
-    private Integer waterContainer;
-    private Integer milkContainer;
-    private boolean isMachineWorking = true;
     List<RecipeCoffee> recipes = new ArrayList<>();
-    List<String> nameResources = new ArrayList<>(Arrays.asList("water", "coffee", "milk"));
-    private final Scanner in = new Scanner(System.in);
+    List<Ingredient> ingredients = new ArrayList<>();
+    private final Scanner scanner = new Scanner(System.in);
 
 
-    public Machine(Integer coffee, Integer water, Integer milk) {
-        this.coffeeContainer = coffee;
-        this.waterContainer = water;
-        this.milkContainer = milk;
-
+    public Machine(String[] args) {
         recipes.add(new RecipeCoffee("ristretto", 0.5, 0.5, 0d, 10));
         recipes.add(new RecipeCoffee("espresso", 0.3, 0.7, 0d, 10));
         recipes.add(new RecipeCoffee("lungo", 0.15, 0.85, 0d, 10));
         recipes.add(new RecipeCoffee("cappuccino", 0.15, 0.4, 0.45, 10));
         recipes.add(new RecipeCoffee("latte", 0.1, 0.3, 0.6, 10));
+
+        ingredients.add(new Ingredient("coffee", args.length >= 2? Integer.parseInt(args[1]) : 0));
+        ingredients.add(new Ingredient("water", args.length >= 1? Integer.parseInt(args[0]) : 0));
+        ingredients.add(new Ingredient("milk", args.length >= 2? Integer.parseInt(args[2]) : 0));
     }
 
     public void run() {
         try {
-            if (checkResourcesMachine(in)) {
-                System.out.println("Tell me what kind of coffee do you want? (e.g. Cappuccino 300 or add water 1000)");
-                while (isMachineWorking()) {
-                    RecipeCoffee userSelectedTypeCoffee = null;
-                    String userEnterNameResource = null;
-                    System.out.print("Enter command: ");
-                    String inputUser = in.nextLine();
-                    if(inputUser.toLowerCase().matches("turn off")){
-                        setStatusMachineWorking(false);
-                        System.out.println("Tefal who once thought of us...");
-                        System.out.println("Bye!");
-                        return;
-                    }
-                    String userInputNameResources = getCmdName(inputUser);
-                    String userInputTypeCoffee = getCmdName(inputUser);
-                    int mlVolume = getVolumeMl(inputUser);
-                    Optional<RecipeCoffee> recipe = recipes.stream().filter(c -> c.getTitle().equals(userInputTypeCoffee)).findFirst();
-                    Optional<String> resourceName = nameResources.stream().filter(n -> n.equals(userInputNameResources)).findFirst();
+            checkResourcesMachine(scanner);
+            System.out.println("Tell me what kind of coffee do you want? (e.g. Cappuccino 300 or add water 1000)");
+            while (true) {
+                System.out.print("Enter command: ");
+                String inputUser = scanner.nextLine();
+                String userInputTypeCoffee = getCommand(inputUser);
+                String userInputNameResources = getCommand(inputUser);
+                int mlVolume = getVolumeMl(inputUser);
+                Optional<RecipeCoffee> recipeOpt = recipes.stream().filter(c -> c.getTitle().equals(userInputTypeCoffee)).findFirst();
+                Optional<Ingredient> ingredientOpt = ingredients.stream().filter(n -> n.getName().equals(userInputNameResources)).findFirst();
 
-                    if(recipe.isPresent()){
-                        userSelectedTypeCoffee = recipe.get();
-                    } else if(resourceName.isPresent()) {
-                        userEnterNameResource = resourceName.get();
+                if (recipeOpt.isPresent()) {
+                    RecipeCoffee userSelectedTypeCoffee = recipeOpt.get();
+                    if (mlVolume >= userSelectedTypeCoffee.getMinCookVolume()) {
+                        System.out.println("Accepted for execution...");
+                        useIngredients(mlVolume, userSelectedTypeCoffee);
                     } else {
-                        System.out.println("Reading error! Possibly wrong command name.");
-                        continue;
+                        System.out.println("Sorry minimum volume for " + userSelectedTypeCoffee.getMinCookVolume() + " ml");
                     }
-
-                    if (userSelectedTypeCoffee != null) {
-                        if(getVolumeMl(inputUser) >= userSelectedTypeCoffee.getMinCookVolume()){
-                            System.out.println("Accepted for execution...");
-                            Thread.sleep(1000);
-                            useIngredients(mlVolume, userSelectedTypeCoffee);
-                        } else {
-                            System.out.println("Sorry minimum volume for " + userSelectedTypeCoffee.getMinCookVolume() + " ml");
-                        }
-                    } else {
-                        if (userEnterNameResource != null){
-                            switch (userEnterNameResource){
-                                case "water":
-                                    checkAndSetWater(mlVolume);
-                                    break;
-                                case "milk":
-                                    checkAndSetMilk(mlVolume);
-                                    break;
-                                case "coffee":
-                                    checkAndSetCoffee(mlVolume);
-                                    break;
-                            }
-                        } else {
-                            throw ExceptionCoffeeMachine.CMD_IS_INCORRECT;
-                        }
-                    }
+                } else if (ingredientOpt.isPresent()) {
+                    final Ingredient ingredient = ingredientOpt.get();
+                    ingredient.updateContainer(mlVolume);
+                    printCurrentVolume();
+                } else {
+                    throw ExceptionCoffeeMachine.NAME_IS_INCORRECT;
                 }
+            }
+        } catch (ExceptionCoffeeMachine e) {
+            if (e.getCode() == 103) {
+                printBye();
+            } else {
+                System.out.println("Custom error: " + e.getMessage());
+                run();
             }
         } catch (Exception e) {
             e.printStackTrace();
+            System.out.println("ReRun Coffee machine");
+            run();
         }
     }
 
-    private void printCurrentVolume() {
-//        System.out.printf("Current volume of coffee: %d ml, water: %d ml, milk: %d ml.\n", getCoffeeContainer(), getWaterContainer(), getMilkContainer());
-        System.out.printf("%d %d %d\n", getCoffeeContainer(), getWaterContainer(), getMilkContainer());
-    }
-
-    private void useIngredients(int mlVolumeCoffee, RecipeCoffee userSelectedTypeCoffee) throws ExceptionCoffeeMachine, InterruptedException {
-        int minusCoffee = (int) (mlVolumeCoffee * userSelectedTypeCoffee.getCoffee());
-        int minusWater = (int) (mlVolumeCoffee * userSelectedTypeCoffee.getWater());
-        int minusMilk = (int) (mlVolumeCoffee * userSelectedTypeCoffee.getMilk());
+    private void useIngredients(int mlOrder, RecipeCoffee selectedTypeCoffee) throws ExceptionCoffeeMachine {
+        int minusCoffee = (int) (mlOrder * selectedTypeCoffee.getCoffee());
+        int minusWater = (int) (mlOrder * selectedTypeCoffee.getWater());
+        int minusMilk = (int) (mlOrder * selectedTypeCoffee.getMilk());
         boolean isPrintCoffeeReady = true;
 
-        if(getCoffeeContainer() >= minusCoffee){
-            if(getWaterContainer() >= minusWater && getMilkContainer() >= minusMilk){
-                setCoffeeContainer(getCoffeeContainer() - minusCoffee);
+        if(ingredients.get(0).getVolume() >= minusCoffee){
+            if(ingredients.get(1).getVolume() >= minusWater && ingredients.get(2).getVolume() >= minusMilk){
+                ingredients.get(0).setVolume(ingredients.get(0).getVolume() - minusCoffee);
             }
         } else {
-            if(getCoffeeContainer() == 0){
+            if(ingredients.get(0).getVolume() == 0){
                 System.out.println("Coffee is over!");
             } else {
-                System.out.printf("For your coffee, you need to add at least %d ml more coffee.\n", -(getCoffeeContainer() - minusCoffee));
+                System.out.printf("For your coffee, you need to add at least %d ml more coffee.\n", -(ingredients.get(0).getVolume() - minusCoffee));
                 isPrintCoffeeReady = false;
             }
             return;
         }
-        if(getWaterContainer() >= minusWater){
-            if(getCoffeeContainer() >= minusCoffee && getMilkContainer() >= minusMilk){
-                setWaterContainer(getWaterContainer() - minusWater);
+        if(ingredients.get(1).getVolume() >= minusWater){
+            if(ingredients.get(0).getVolume() >= minusCoffee && ingredients.get(2).getVolume() >= minusMilk){
+                ingredients.get(1).setVolume(ingredients.get(1).getVolume() - minusWater);
             }
         } else {
-            if(getWaterContainer() == 0){
+            if(ingredients.get(2).getVolume() == 0){
                 System.out.println("Water is over!");
             } else {
-                System.out.printf("For your coffee, you need to add at least %d ml more water.\n", -(getWaterContainer() - minusWater));
+                System.out.printf("For your coffee, you need to add at least %d ml more water.\n", -(ingredients.get(1).getVolume() - minusWater));
                 isPrintCoffeeReady = false;
             }
             return;
         }
-        if(getMilkContainer() >= minusMilk){
-            setMilkContainer(getMilkContainer() - minusMilk);
+        if(ingredients.get(2).getVolume() >= minusMilk){
+            ingredients.get(2).setVolume(ingredients.get(2).getVolume() - minusMilk);
         } else {
-            if(getMilkContainer() == 0){
+            if(ingredients.get(2).getVolume() == 0){
                 System.out.println("Milk is over!");
             } else {
-                System.out.printf("For your coffee, you need to add at least %d ml more milk .\n", -(getMilkContainer() - minusMilk));
+                System.out.printf("For your coffee, you need to add at least %d ml more milk .\n", -(ingredients.get(2).getVolume() - minusMilk));
                 isPrintCoffeeReady = false;
             }
         }
+
         if (isPrintCoffeeReady) {
-            System.out.printf("Your %s %d ml is ready!\n", userSelectedTypeCoffee.getTitle().substring(0, 1).toUpperCase() + userSelectedTypeCoffee.getTitle().substring(1), mlVolumeCoffee);
+            System.out.printf("Your %s %d ml is ready!\n", selectedTypeCoffee.getTitle().substring(0, 1).toUpperCase() + selectedTypeCoffee.getTitle().substring(1), mlOrder);
         }
         printCurrentVolume();
     }
 
-    private boolean checkResourcesMachine(Scanner in) throws ExceptionCoffeeMachine, InterruptedException {
+    private boolean checkResourcesMachine(Scanner in) {
         System.out.println("Check in tanks ingredients ...");
-        if(getCoffeeContainer() == null || getCoffeeContainer() == 0){
-            updateContainerCoffee(in);
-        }
-        if(getWaterContainer() == null || getWaterContainer() == 0){
-            updateContainerWater(in);
-        }
-        if(getMilkContainer() == null || getMilkContainer() == 0){
-            updateContainerMilk(in);
-        }
+        ingredients.forEach(el -> {
+            if(el.getVolume() == null || el.getVolume() == 0){
+                 // el.updateContainer(getVolumeMl(in.nextLine()));
+                System.out.printf("Not enough %s!\n", el.getName());
+            }
+        });
         return true;
     }
 
-    private void updateContainerMilk(Scanner in) throws ExceptionCoffeeMachine, InterruptedException {
-        System.out.print("Specify in ml how much you want to add milk (e.g. milk 1000): ");
-        String input = in.nextLine();
-        int volumeMl = getVolumeMl(input);
-        checkAndSetMilk(volumeMl);
-    }
-
-    private void updateContainerWater(Scanner in) throws ExceptionCoffeeMachine, InterruptedException {
-        System.out.print("Specify in ml how much you want to add water (e.g. water 1000): ");
-        String input = in.nextLine();
-        int volumeMl = getVolumeMl(input);
-        checkAndSetWater(volumeMl);
-    }
-
-    private void updateContainerCoffee(Scanner in) throws ExceptionCoffeeMachine, InterruptedException {
-        System.out.print("Specify in ml how much you want to add coffee (e.g. coffee 1000): ");
-        String input = in.nextLine();
-        int volumeMl = getVolumeMl(input);
-        checkAndSetCoffee(volumeMl);
-    }
-
-    private void checkAndSetMilk(int volumeMl) throws InterruptedException, ExceptionCoffeeMachine {
-        if (volumeMl > 0){
-            setMilkContainer(getMilkContainer() + volumeMl);
-            Thread.sleep(1000);
-            printCurrentVolume();
-        } else {
-            System.out.println("Enter the correct integer value (ml)");
+    private String getCommand(String inputScanner) throws ExceptionCoffeeMachine {
+        if(inputScanner == null || inputScanner.isEmpty()) return "";
+        final String s = inputScanner.trim().replaceAll("\\s{2,}", " ").toLowerCase();
+        if(s.equals("turn off")) throw ExceptionCoffeeMachine.TURN_OFF;
+        final String[] s2 = s.split(" ");
+        if (s2.length == 1){
+            System.err.printf("Mistake! Possibly incorrect command. %s\n", inputScanner);
         }
-    }
-
-    private void checkAndSetWater(int volumeMl) throws InterruptedException {
-        if (volumeMl > 0){
-            setWaterContainer(getWaterContainer() + volumeMl);
-            Thread.sleep(1000);
-            printCurrentVolume();
-        } else {
-            System.out.println("Enter the correct integer value (ml)");
-        }
-    }
-
-    private void checkAndSetCoffee(int volumeMl) throws InterruptedException {
-        if (volumeMl > 0){
-            setCoffeeContainer(getCoffeeContainer() + volumeMl);
-            Thread.sleep(1000);
-            printCurrentVolume();
-        } else {
-            System.out.println("Enter the correct integer value (ml)");
-        }
-    }
-
-    private String getCmdName(String inputScanner) throws ExceptionCoffeeMachine {
-        //return Pattern.compile("(\\W|\\d*)").matcher(inputScanner).replaceAll("").toLowerCase();
-        final String[] s = inputScanner.trim().replaceAll("\\s{2,}", " ").split(" ");
-        if (s.length == 1){
-            System.err.printf("Mistake! Possibly incorrect name. %s\n", inputScanner);
-            throw ExceptionCoffeeMachine.NAME_IS_INCORRECT;
-        }
-        return s[0].toLowerCase();
+        return s2[0];
     }
 
     private int getVolumeMl(String inputScanner) throws ExceptionCoffeeMachine {
-        //final String s = Pattern.compile("(\\.\\d)|[^(\\-?\\d)]*").matcher(inputScanner).replaceAll("");
+        getCommand(inputScanner);
         final String[] s = inputScanner.trim().replaceAll("\\s{2,}", " ").split(" ");
-        if (s.length != 2 && !Character.isAlphabetic(s[1].charAt(0))){
+        if (s.length != 2 || Character.isAlphabetic(s[1].charAt(0))){
             System.err.printf("Mistake! Possibly wrong volume. %s\n", inputScanner);
             throw ExceptionCoffeeMachine.VOLUME_IS_INCORRECT;
         }
         return Integer.parseInt(s[1].replaceAll("\\.(\\d*)*", ""));
     }
 
-    public boolean isMachineWorking() {
-        return isMachineWorking;
+    private void printCurrentVolume() {
+        System.out.println(ingredients.stream().map(el ->{return el.getVolume().toString();}).collect(Collectors.joining(" ")));
     }
 
-    public void setStatusMachineWorking(boolean machineWorking) {
-        this.isMachineWorking = machineWorking;
-    }
-
-    public Integer getCoffeeContainer() {
-        return coffeeContainer == null ? 0: coffeeContainer;
-    }
-
-    public void setCoffeeContainer(Integer coffeeContainer) {
-        this.coffeeContainer = coffeeContainer;
-    }
-
-    public Integer getWaterContainer() {
-        return waterContainer == null ? 0: waterContainer;
-    }
-
-    public void setWaterContainer(Integer waterContainer) {
-        this.waterContainer = waterContainer;
-    }
-
-    public Integer getMilkContainer() {
-        return milkContainer == null ? 0: milkContainer;
-    }
-
-    public void setMilkContainer(Integer milkContainer) {
-        this.milkContainer = milkContainer;
+    private void printBye() {
+        System.out.println("Tefal who once thought of us...");
+        System.out.println("Bye!");
     }
 }
